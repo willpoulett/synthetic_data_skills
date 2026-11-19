@@ -144,7 +144,14 @@ evaluation; current maintenance unclear.
 
 ## No real seed data
 
-Risk is lower, not zero. Check:
+**From-intelligence privacy stance.** When a dataset was generated exclusively from published
+statistics, schema specs, and random sampling — no real patient data at any stage — privacy is
+established by construction. The generator had no mechanism to reproduce or approximate a real
+person's record. NHS numbers in the 999 test range cannot collide with real numbers. State this
+positively in the report rather than defaulting to "not established". Post-hoc comparison against
+real data would introduce the very data dependency the from-intelligence approach avoids.
+
+Risk is lower, not zero. Still check:
 
 1. Whether any real record informed generation, including via a prompt. If so, the dataset is not
    seed-free and the full audit applies.

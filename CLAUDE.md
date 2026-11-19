@@ -53,6 +53,17 @@ For tool selection or generation method → consult the synthetic-data-generatio
 For "is this good / safe enough?" → consult the synthetic-data-evaluation skill.
 For anything that would touch real data, privacy, or leaves the environment → stop and confirm rather than assume.
 
+## Learning loop
+
+When a dataset generation or evaluation is complete, capture learnings that would help a future user working with the same or similar datasets:
+
+- **Generic findings** (apply to any dataset) → update the relevant SKILL.md (generation or evaluation)
+- **Dataset-specific findings** (conditional sampling chain, NULL fields, known pitfalls, external references) → update or create a reference file under `references/` in the relevant skill. One file per dataset or dataset family. Use the existing `references/msds.md` and `references/pathways.md` as templates.
+- **What tripped up the AI** is the highest-value learning. Record it: the mistake, the root cause, and the fix.
+- If a Confluence learnings page exists for this work, update it too.
+
+Each dataset reference file should include: what the dataset is, the conditional sampling chain, what worked, what tripped up the AI, external references used, and evaluation checks specific to that dataset.
+
 ## Scope
 
 - Only read, write, or reference files within this repository.
@@ -64,6 +75,18 @@ For anything that would touch real data, privacy, or leaves the environment → 
 - Use `Read`, `Grep`, and `Glob` directly for simple file searches. Only spawn an Explore or general-purpose agent when those tools are clearly insufficient.
 - Do not use a subagent (Task tool) to read binary files (e.g. `.xlsx`, `.pdf`, `.parquet`). Instead, read them in-process via Bash with `openpyxl`/`polars`/`pandas`, or ask the user to provide the relevant content as text.
 - Do not write to `/tmp` or use shell commands that expand outside the repo.
+
+## Reusable scripts
+
+`scripts/extract_tos_schema.py` — parses any NHS TOS Excel into a JSON schema (MSDS, MHSDS, HES, ECDS, CSDS, IAPT). Use it before generating any TOS-defined dataset. Captures field names, data types, mandation levels, national codes, and derivation notes.
+
+`scripts/format_parser.py` — parses NHS TOS format notation (e.g. `an10 CCYY-MM-DD`, `max n20`) into structured validation rules. Used by the schema extractor.
+
+Dataset-specific scripts (generators, evaluators, distribution files) are written per-project and not committed — the patterns they follow are documented in the skills and reference files.
+
+## Generated data
+
+Generated CSV data is not committed to this repo. Each generation run writes to `data/{dataset}_{fidelity}/` locally. The `data/broken_arm_day1/` demo dataset is the exception — it is committed as a curated example.
 
 ## Python
 

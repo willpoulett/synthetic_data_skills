@@ -34,11 +34,17 @@ Report what was measured, what was not, and why, so the reader can judge fitness
 **5. An unrun check is "not established", never "safe".** This applies to the free-text leakage
 assessment and the safe-to-share verdict especially. Say what would need to run to establish it.
 
+**6. Schema checks use the full specification.** When a technical specification exists, every field
+it defines for a generated table must be present in the output — regardless of mandation level. A
+derived field missing from the output is a schema failure, not something outside the evaluator's
+scope. Load the same machine-readable schema the generator used (from `schemas/`) and validate all
+field classifications, not just "mandatory" and "required."
+
 ## Axes
 
-**Fidelity** — does it look like real data. Three levels: univariate (column distributions),
-multivariate (correlations and joint structure, where cross-modal coherence shows up as a number),
-clinical (domain logic a clinician would catch). → `references/fidelity.md`
+**Fidelity** — does it look like real data. Four levels: schema conformance (L0), univariate
+(column distributions), multivariate (correlations and joint structure), clinical (domain logic a
+clinician would catch). → `references/fidelity.md`
 
 **Utility** — is it useful for the task. TSTR: train on synthetic, test on held-out real, compare
 against a real-trained baseline. Lighter checks: ML comparison, synthetic-vs-real discriminator.
@@ -83,9 +89,11 @@ its box.
 ```
 Evaluation progress:
 - [ ] 1. REPORT.md sections 1-6 read; seeding case and label provenance established before any result is interpreted
+- [ ] 1a. Machine-readable schema loaded (if one exists); all field classifications identified
 - [ ] 2. Scope fixed — which checks can run, which need real data, which need user permission
 - [ ] 3. Tools acquired and verified — installed in .venv and smoke-tested, or recorded as not runnable
-- [ ] 4. Fidelity: levels 1-3 run, or explicitly recorded as not run and why
+- [ ] 4a. Fidelity L0: schema conformance against full specification (all mandation levels, column counts, code lists)
+- [ ] 4b. Fidelity L1-L3: univariate, multivariate, clinical — run or explicitly recorded as not run and why
 - [ ] 5. Utility: TSTR against a real holdout, or the substitution named as a substitution
 - [ ] 6. Privacy: checks run; nothing requiring real data run without user confirmation
 - [ ] 7. Fidelity and privacy read against each other before either is reported
@@ -107,10 +115,27 @@ If sections 1-6 are missing or thin, the dataset was not generated through the
 **synthetic-data-generation** skill's Step 7. Say so and reconstruct what you can before evaluating;
 record in section 10 what could not be reconstructed.
 
+If a machine-readable schema exists in `schemas/`, load it now. It is the authority for field names,
+mandation levels, code lists, and derivation rules used in L0 checks.
+
 ## Step 2 — establish what can run
 
-Determine whether real data exists for comparison and whether its use is permitted. This fixes the
-scope of the whole evaluation.
+Determine the claimed fidelity level and whether real data exists for comparison.
+
+### Fidelity tiers
+
+The fidelity tier claimed by the generator determines which checks are expected:
+
+| Tier | Required checks |
+| --- | --- |
+| Low | L0 schema conformance, L1 univariate vs published stats, L2 cross-table FKs |
+| Medium | All low checks plus statistical tests (binomial, chi-squared, Pearson) against published distributions |
+| High | All medium checks plus validation against real data (KS, JS divergence, discriminator, TSTR, privacy audit) |
+
+High fidelity is earned by evidence, not by generation method. Without real data to compare
+against, the best claim is medium.
+
+### Scope by data availability
 
 | Situation | Fidelity | Utility | Privacy |
 | --- | --- | --- | --- |
@@ -118,7 +143,18 @@ scope of the whole evaluation.
 | Real data exists, not used for generation | Full, as reference distribution | TSTR if the holdout is representative | Required; lower risk |
 | No real data | Clinical + internal consistency only | TSTR impossible — see **No real seed data** | Lower risk; re-check if any real record informed a prompt |
 
-Anything in the right-hand column that needs real data is subject to Rule 3: confirm with the user
+### Specification-aware checks
+
+When a machine-readable schema exists, add these checks regardless of seeding case:
+
+- L0 schema conformance against the full specification (all mandation levels)
+- Column count verification per table
+- Code list validation for every coded field
+- Cross-table foreign key integrity
+
+These checks are free — they need no real data and catch the most common generation bugs.
+
+Anything in the scope table that needs real data is subject to Rule 3: confirm with the user
 before it runs, and confirm who runs it.
 
 ## Step 3 — acquire and verify tools
@@ -136,12 +172,32 @@ report section 9. A check that could not run is not a check that passed (Rule 5)
 
 ## Step 4 — fidelity
 
-Three levels, run in order; a dataset failing level 1 does not need level 3 yet. Record each level
-separately — a combined score hides which level failed, and the levels have different remedies.
-→ `references/fidelity.md`
+Four levels, run in order; a dataset failing an earlier level does not need a later one yet. Record
+each level separately — a combined score hides which level failed, and the levels have different
+remedies. → `references/fidelity.md`
 
-Level 3, clinical plausibility, is a rules-based layer written in-house. There is no off-the-shelf
-metric; do not search for a library.
+**L0 — schema conformance.** Every column the spec defines exists; every coded value is valid;
+column counts match. This is prerequisite. See `references/fidelity.md` Level 0.
+
+**L1 — univariate.** Column distributions vs published stats or the cohort definition.
+
+**L2 — multivariate.** Correlations, joint distributions, cross-table consistency.
+
+**L3 — clinical.** Domain logic a clinician would catch. Rules-based, written in-house. No
+off-the-shelf metric; do not search for a library.
+
+### Interpreting p-values
+
+For distribution checks, p-values test the null hypothesis that the synthetic distribution matches
+the target. This is the OPPOSITE of typical research:
+
+- **High p-value = PASS** (cannot reject that synthetic matches target)
+- **Low p-value = FAIL** (synthetic significantly differs from target)
+
+Reports must include a "Reading the p-values" section explaining this.
+
+Exception: correlation checks test whether correlations are PRESENT, so they use standard
+interpretation (low p = significant correlation = PASS).
 
 ## Step 5 — utility
 
@@ -167,10 +223,22 @@ Before writing either result. A high fidelity score and a clean privacy result a
 high fidelity score and an undistinguishable discriminator are the same finding read twice, and the
 reading is leakage (Rule 2).
 
+**Discriminator AUC bands:**
+
+| AUC | Reading |
+| --- | --- |
+| < 0.55 | Privacy alarm — too similar, possible memorisation |
+| 0.55–0.75 | Good fidelity |
+| 0.75–0.85 | Moderate fidelity |
+| > 0.85 | Poor fidelity — easily distinguishable |
+
 ## Step 8 — write the report and the verdict
 
 Complete sections 7-10 of the dataset's `REPORT.md`: fidelity, utility, privacy and disclosure,
 limitations. Template and rules: `references/report.md`.
+
+Reports must stand alone per fidelity level. Do not reference or compare to other fidelity levels
+within a report.
 
 The verdict is one of **safe to share**, **not safe to share**, **not established**. Where the
 checks that would justify sharing could not run — inspiration-only tooling, or a check needing real
@@ -180,6 +248,12 @@ user with a statement of what would settle it.
 If results are poor, hand back to the **synthetic-data-generation** skill with the specific failure
 — a broken correlation, an implausible medication pairing, a cross-modal mismatch — not a request
 to regenerate. Then re-run the checks that failed.
+
+### Human evaluation
+
+Generated data will still need checking by a human to identify issues the automated checks miss.
+If the reviewer is not familiar with dataset idiosyncrasies, find someone who is. Recommend
+clinician review of a sample — with no real comparator it is the strongest validation available.
 
 ## No real seed data
 
@@ -196,6 +270,27 @@ substitution in the report:
 - Recommend clinician review of a sample. With no real comparator it is the strongest validation
   available.
 
-Privacy risk is lower, not zero. Re-check whether any real record informed generation, including
-via a prompt; whether LLM-generated free text surfaces memorised training content; and whether
+### From-intelligence privacy
+
+When the generator used no real data at any stage — no seed records, no real records in prompts, no
+fitting to individual-level data — and the dataset contains no LLM-generated free text that could
+surface memorised training content, the privacy stance is **"low risk by construction"**, not "not
+established."
+
+The generator has no mechanism to reproduce or approximate a real person's record. Post-hoc
+comparison against real data (membership inference, exact-match) would introduce the very data
+dependency the from-intelligence approach avoids. Do not list unrunnable checks as gaps — they
+structurally do not apply.
+
+This stance requires verifying:
+- No real patient data was used at any generation stage
+- No real records were pasted into LLM prompts
+- Identifiers use synthetic ranges that cannot collide with real ones (e.g. NHS 999 test range)
+- Free-text fields, if any, were generated from structured state, not from prompts containing real
+  records
+
+If any of these checks fail, the dataset is no longer purely from-intelligence and the standard
+privacy evaluation applies.
+
+Re-check whether LLM-generated free text surfaces memorised training content; and whether
 invented records collide with real people by chance in a small, distinctive population.
